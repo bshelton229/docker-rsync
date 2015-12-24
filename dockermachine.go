@@ -8,21 +8,19 @@ import (
 )
 
 func Provision(machineName string, verbose bool) {
-	c := []string{
-		// install and run rsync daemon
-		`tce-load -wi rsync attr acl`,
+	if _, err := RunSSHCommand(machineName, "which rsync", verbose); err != nil {
+		installCommands := []string{
+			// install and run rsync daemon
+			`tce-load -wi rsync attr acl`,
+		}
 
-		// disable boot2dockers builtin vboxfs
-		// TODO bad idea, because you then can't use vboxfs anymore
-		// `sudo umount /Users || /bin/true`,
-	}
-
-	for _, v := range c {
-		out, err := RunSSHCommand(machineName, v, verbose)
-		if err != nil {
-			fmt.Println(err)
-			fmt.Printf("%s\n", out)
-			os.Exit(1)
+		for _, command := range installCommands {
+			out, err := RunSSHCommand(machineName, command, verbose)
+			if err != nil {
+				fmt.Println(err)
+				fmt.Printf("%s\n", out)
+				os.Exit(1)
+			}
 		}
 	}
 }
@@ -40,14 +38,26 @@ func GetSSHPort(machineName string) (port uint, err error) {
 		return 0, err
 	}
 
+	return PortFromMachineJSON(out)
+}
+
+func PortFromMachineJSON(jsonData []byte) (port uint, err error) {
 	var v struct {
 		Driver struct {
+			Driver struct {
+				SSHPort uint
+			}
 			SSHPort uint
 		}
 	}
 
-	if err := json.Unmarshal(out, &v); err != nil {
+	if err := json.Unmarshal(jsonData, &v); err != nil {
 		return 0, err
 	}
-	return v.Driver.SSHPort, nil
+
+	if v.Driver.SSHPort == 0 {
+		return v.Driver.Driver.SSHPort, nil
+	} else {
+		return v.Driver.SSHPort, nil
+	}
 }
